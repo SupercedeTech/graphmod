@@ -26,6 +26,16 @@ import Distribution.Types.UnqualComponentName (UnqualComponentName)
 #if MIN_VERSION_Cabal(2,2,0)
 import Distribution.Pretty (prettyShow)
 
+#if MIN_VERSION_Cabal(3,6,0)
+import Distribution.Utils.Path (SymbolicPath, PackageDir, SourceDir, getSymbolicPath)
+
+sourceDirToFilePath :: SymbolicPath PackageDir SourceDir -> FilePath
+sourceDirToFilePath = getSymbolicPath
+#else
+sourceDirToFilePath :: FilePath -> FilePath
+sourceDirToFilePath = id
+#endif
+
 pretty :: UnqualComponentName -> String
 pretty = prettyShow
 #else
@@ -46,7 +56,6 @@ pretty :: String -> String
 pretty = id
 #endif
 
-
 parseCabalFile :: FilePath -> IO [Unit]
 parseCabalFile f = fmap findUnits (readGenericPackageDescription silent f)
 
@@ -65,7 +74,7 @@ data UnitName = UnitLibrary | UnitExecutable String
 
 libUnit :: Library -> Unit
 libUnit lib = Unit { unitName     = UnitLibrary
-                   , unitPaths    = hsSourceDirs (libBuildInfo lib)
+                   , unitPaths    = sourceDirToFilePath <$> hsSourceDirs (libBuildInfo lib)
                    , unitModules  = map toMod (exposedModules lib)
                                                       -- other modules?
                    , unitFiles    = []
@@ -73,11 +82,11 @@ libUnit lib = Unit { unitName     = UnitLibrary
 
 exeUnit :: Executable -> Unit
 exeUnit exe = Unit { unitName    = UnitExecutable (pretty $ exeName exe)
-                   , unitPaths   = hsSourceDirs (buildInfo exe)
+                   , unitPaths   = sourceDirToFilePath <$> hsSourceDirs (buildInfo exe)
                    , unitModules = [] -- other modules?
                    , unitFiles   = case hsSourceDirs (buildInfo exe) of
                                      [] -> [ modulePath exe ]
-                                     ds -> [ d </> modulePath exe | d <- ds ]
+                                     ds -> [ sourceDirToFilePath d </> modulePath exe | d <- ds ]
                    }
 
 toMod :: ModuleName -> ModName
